@@ -1,6 +1,9 @@
-package wxwork
+package oauth2
 
-import "time"
+import (
+	"net/http"
+	"time"
+)
 
 const expiryDelta = 10 * time.Second
 
@@ -21,6 +24,12 @@ func (t *Token) expired() bool {
 // Valid reports whether t is non-nil, has an AccessToken, and is not expired.
 func (t *Token) Valid() bool {
 	return t != nil && t.AccessToken != "" && !t.expired()
+}
+
+func (t *Token) SetAuthParameter(req *http.Request) {
+	q := req.URL.Query()
+	q.Add("access_token", t.AccessToken)
+	req.URL.RawQuery = q.Encode()
 }
 
 // TokenSource returns token

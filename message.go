@@ -2,6 +2,8 @@ package wxwork
 
 import (
 	"context"
+	"errors"
+	"fmt"
 )
 
 // Weixin work message type.
@@ -137,7 +139,22 @@ type MessageService service
 //
 // Weixin Work API docs: https://work.weixin.qq.com/api/doc#90000/90135/90236
 func (s *MessageService) Send(ctx context.Context, agentID int, targets *TargetSet, m Message, opt *SendOptions) (*SendResult, *Response, error) {
-	return nil, nil, nil
+	rawReq, err := newRawSendRequest(agentID, targets, m, opt)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	req, err := s.client.NewRequest("POST", "/cgi-bin/message/send", rawReq)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	rawResp := new(rawSendResponse)
+	if _, err := s.client.Do(ctx, req, rawResp); err != nil {
+		return nil, nil, err
+	}
+
+	return newSendResult(rawResp), nil, nil
 }
 
 // Options for send weixin work messages.
@@ -148,7 +165,7 @@ type SendOptions struct {
 
 // Result of send action.
 type SendResult struct {
-	InvalidTargets TargetSet
+	InvalidTargets *TargetSet
 }
 
 type rawSendRequest struct {
@@ -159,20 +176,114 @@ type rawSendRequest struct {
 	AgentID int     `json:"agentid"`
 	MsgType MsgType `json:"msgtype"`
 
-	Text              Text              `json:"text,omitempty"`
-	Image             Image             `json:"image,omitempty"`
-	Voice             Voice             `json:"voice,omitempty"`
-	Video             Video             `json:"video,omitempty"`
-	File              File              `json:"file,omitempty"`
-	News              News              `json:"news,omitempty"`
-	TextCard          TextCard          `json:"textcard,omitempty"`
-	Markdown          Markdown          `json:"markdown,omitempty"`
-	MiniProgramNotice MiniProgramNotice `json:"miniprogram_notice,omitempty"`
-	Safe              bool              `json:"safe,omitempty"`
+	Text              *Text              `json:"text,omitempty"`
+	Image             *Image             `json:"image,omitempty"`
+	Voice             *Voice             `json:"voice,omitempty"`
+	Video             *Video             `json:"video,omitempty"`
+	File              *File              `json:"file,omitempty"`
+	News              *News              `json:"news,omitempty"`
+	TextCard          *TextCard          `json:"textcard,omitempty"`
+	Markdown          *Markdown          `json:"markdown,omitempty"`
+	MiniProgramNotice *MiniProgramNotice `json:"miniprogram_notice,omitempty"`
+
+	Safe bool `json:"safe,omitempty"`
+}
+
+func newRawSendRequest(agentID int, targets *TargetSet, m Message, opt *SendOptions) (*rawSendRequest, error) {
+	req := new(rawSendRequest)
+
+	if err := req.setAgentID(agentID); err != nil {
+		return nil, err
+	}
+
+	if err := req.setTargets(targets); err != nil {
+		return nil, err
+	}
+
+	if err := req.setMessage(m); err != nil {
+		return nil, err
+	}
+
+	if opt != nil {
+		req.Safe = opt.Safe
+	}
+
+	return req, nil
+}
+
+func (req *rawSendRequest) setAgentID(agentID int) error {
+	if agentID == 0 {
+		return errors.New("wxwork: invalid agent id")
+	}
+
+	req.AgentID = agentID
+	return nil
+}
+
+func (req *rawSendRequest) setTargets(targets *TargetSet) error {
+	if err := targets.Validate(); err != nil {
+		return err
+	}
+
+	req.ToUser = targets.Users
+	req.ToParty = targets.Parties
+	req.ToTag = targets.Tags
+
+	return nil
+}
+
+func (req *rawSendRequest) setMessage(m Message) error {
+	req.MsgType = m.Type()
+
+	switch v := m.(type) {
+	case *Text:
+		req.Text = v
+
+	case *Image:
+		req.Image = v
+
+	case *Voice:
+		req.Voice = v
+
+	case *Video:
+		req.Video = v
+
+	case *File:
+		req.File = v
+
+	case *News:
+		req.News = v
+
+	case *TextCard:
+		req.TextCard = v
+
+	case *Markdown:
+		req.Markdown = v
+
+	case *MiniProgramNotice:
+		req.MiniProgramNotice = v
+
+	default:
+		return fmt.Errorf("wxwork: unknown message type: %v", v.Type())
+	}
+
+	return nil
 }
 
 type rawSendResponse struct {
 	InvalidUser  UserSet  `json:"invaliduser,omitempty"`
 	InvalidParty PartySet `json:"invalidparty,omitempty"`
 	InvalidTag   TagSet   `json:"invalidtag,omitempty"`
+}
+
+func newSendResult(r *rawSendResponse) *SendResult {
+	targets := &TargetSet{
+		Users:   r.InvalidUser,
+		Parties: r.InvalidParty,
+		Tags:    r.InvalidTag,
+	}
+
+	return &SendResult{
+		InvalidTargets: targets,
+	}
 }

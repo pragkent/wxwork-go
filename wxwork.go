@@ -99,7 +99,7 @@ func (c *Client) NewRequest(method, urlStr string, body interface{}) (*http.Requ
 //
 // The provided ctx must be non-nil. If it is canceled or times out,
 // ctx.Err() will be returned.
-func (c *Client) Do(ctx context.Context, req *http.Request, v interface{}) (*Response, error) {
+func (c *Client) Do(ctx context.Context, req *http.Request, v interface{}) (*http.Response, error) {
 	req.WithContext(ctx)
 
 	resp, err := c.client.Do(req)
@@ -124,10 +124,8 @@ func (c *Client) Do(ctx context.Context, req *http.Request, v interface{}) (*Res
 	}
 	defer resp.Body.Close()
 
-	response := &Response{resp}
-
 	if err = CheckResponse(resp); err != nil {
-		return response, err
+		return resp, err
 	}
 
 	if v != nil {
@@ -144,7 +142,7 @@ func (c *Client) Do(ctx context.Context, req *http.Request, v interface{}) (*Res
 		}
 	}
 
-	return response, err
+	return resp, err
 }
 
 var sensitiveParams = []string{
@@ -175,10 +173,6 @@ func sanitizeURL(uri *url.URL) *url.URL {
 	}
 
 	return uri
-}
-
-type Response struct {
-	*http.Response
 }
 
 type ErrorResponse struct {

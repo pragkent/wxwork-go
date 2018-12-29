@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 )
 
 // Weixin work message type.
@@ -138,7 +139,7 @@ type MessageService service
 // Send sends a message to targets.
 //
 // Weixin Work API docs: https://work.weixin.qq.com/api/doc#90000/90135/90236
-func (s *MessageService) Send(ctx context.Context, agentID int, targets *TargetSet, m Message, opt *SendOptions) (*SendResult, *Response, error) {
+func (s *MessageService) Send(ctx context.Context, agentID int, targets *TargetSet, m Message, opt *SendOptions) (*SendResult, *http.Response, error) {
 	rawReq, err := newRawSendRequest(agentID, targets, m, opt)
 	if err != nil {
 		return nil, nil, err

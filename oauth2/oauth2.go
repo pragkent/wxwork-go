@@ -2,8 +2,13 @@ package oauth2
 
 import (
 	"bytes"
+	"context"
+	"fmt"
+	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/pragkent/wxwork-go/oauth2/internal"
 )
 
 type Config struct {
@@ -71,4 +76,32 @@ func (c *Config) AuthCodeURL(state string, opts ...AuthCodeOption) string {
 
 	buf.WriteString(v.Encode())
 	return buf.String()
+}
+
+var HTTPClient internal.ContextKey
+
+func NewClient(ctx context.Context, src TokenSource) *http.Client {
+	if src == nil {
+		return internal.ContextClient(ctx)
+	}
+
+	return &http.Client{
+		Transport: &Transport{
+			Base:   internal.ContextClient(ctx).Transport,
+			Source: ReuseTokenSource(nil, src),
+		},
+	}
+}
+
+// RetrieveError is the error returned when the token endpoint returns a
+// non-2XX HTTP status code.
+type RetrieveError struct {
+	Response *http.Response
+	// Body is the body that was consumed by reading Response.Body.
+	// It may be truncated.
+	Body []byte
+}
+
+func (r *RetrieveError) Error() string {
+	return fmt.Sprintf("oauth2: cannot fetch token: %v: %s", r.Response.Status, r.Body)
 }

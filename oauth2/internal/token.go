@@ -9,6 +9,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"time"
 )
 
@@ -65,15 +66,15 @@ func (e *expirationTime) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-func RetrieveToken(ctx context.Context, tokenURL string, v interface{}) (*Token, error) {
-	req, err := newRequest(ctx, tokenURL, v)
+func RetrieveToken(ctx context.Context, tokenURL string, q url.Values, v interface{}) (*Token, error) {
+	req, err := newRequest(ctx, tokenURL, q, v)
 	if err != nil {
 		return nil, err
 	}
 
 	req.WithContext(ctx)
 
-	r, err := http.DefaultClient.Do(req)
+	r, err := ContextClient(ctx).Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -115,17 +116,22 @@ func RetrieveToken(ctx context.Context, tokenURL string, v interface{}) (*Token,
 	return token, nil
 }
 
-func newRequest(ctx context.Context, tokenURL string, v interface{}) (*http.Request, error) {
-	if v == nil {
-		return http.NewRequest("GET", tokenURL, nil)
+func newRequest(ctx context.Context, tokenURL string, q url.Values, v interface{}) (*http.Request, error) {
+	if len(q) != 0 {
+		tokenURL += "?"
+		tokenURL += q.Encode()
 	}
 
-	out, err := json.Marshal(v)
-	if err != nil {
-		return nil, errors.New("oauth2: marshal body error")
+	var body io.Reader
+	if v != nil {
+		out, err := json.Marshal(v)
+		if err != nil {
+			return nil, errors.New("oauth2: marshal request body error")
+		}
+		body = bytes.NewReader(out)
 	}
 
-	return http.NewRequest("POST", tokenURL, bytes.NewReader(out))
+	return http.NewRequest("POST", tokenURL, body)
 }
 
 type RetrieveError struct {
@@ -134,5 +140,5 @@ type RetrieveError struct {
 }
 
 func (r *RetrieveError) Error() string {
-	return fmt.Sprintf("oauth2: cannot fetch token: %v\nResponse: %s", r.Response.Status, r.Body)
+	return fmt.Sprintf("oauth2: cannot fetch token: %v: %s", r.Response.Status, r.Body)
 }

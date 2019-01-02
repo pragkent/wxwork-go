@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+
+	"github.com/pragkent/wxwork-go/internal"
 )
 
 // Weixin work message type.
@@ -139,8 +141,8 @@ type MessageService service
 // Send sends a message to targets.
 //
 // Weixin Work API docs: https://work.weixin.qq.com/api/doc#90000/90135/90236
-func (s *MessageService) Send(ctx context.Context, agentID int, targets *TargetSet, m Message, opt *SendOptions) (*SendResult, *http.Response, error) {
-	rawReq, err := newRawSendRequest(agentID, targets, m, opt)
+func (s *MessageService) Send(ctx context.Context, agentID int, targets TargetSet, m Message, opt *SendOptions) (*SendResult, *http.Response, error) {
+	rawReq, err := newSendRequest(agentID, targets, m, opt)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -150,12 +152,12 @@ func (s *MessageService) Send(ctx context.Context, agentID int, targets *TargetS
 		return nil, nil, err
 	}
 
-	rawResp := new(rawSendResponse)
-	if _, err := s.client.Do(ctx, req, rawResp); err != nil {
+	var rawResp sendResponse
+	if _, err := s.client.Do(ctx, req, &rawResp); err != nil {
 		return nil, nil, err
 	}
 
-	return newSendResult(rawResp), nil, nil
+	return newSendResult(&rawResp), nil, nil
 }
 
 // Options for send weixin work messages.
@@ -169,10 +171,10 @@ type SendResult struct {
 	InvalidTargets *TargetSet
 }
 
-type rawSendRequest struct {
-	ToUser  UserSet  `json:"touser,omitempty"`
-	ToParty PartySet `json:"toparty,omitempty"`
-	ToTag   TagSet   `json:"totag,omitempty"`
+type sendRequest struct {
+	ToUser  internal.StringSet `json:"touser,omitempty"`
+	ToParty internal.IntSet    `json:"toparty,omitempty"`
+	ToTag   internal.IntSet    `json:"totag,omitempty"`
 
 	AgentID int     `json:"agentid"`
 	MsgType MsgType `json:"msgtype"`
@@ -190,8 +192,8 @@ type rawSendRequest struct {
 	Safe bool `json:"safe,omitempty"`
 }
 
-func newRawSendRequest(agentID int, targets *TargetSet, m Message, opt *SendOptions) (*rawSendRequest, error) {
-	req := new(rawSendRequest)
+func newSendRequest(agentID int, targets TargetSet, m Message, opt *SendOptions) (*sendRequest, error) {
+	req := new(sendRequest)
 
 	if err := req.setAgentID(agentID); err != nil {
 		return nil, err
@@ -212,7 +214,7 @@ func newRawSendRequest(agentID int, targets *TargetSet, m Message, opt *SendOpti
 	return req, nil
 }
 
-func (req *rawSendRequest) setAgentID(agentID int) error {
+func (req *sendRequest) setAgentID(agentID int) error {
 	if agentID == 0 {
 		return errors.New("wxwork: invalid agent id")
 	}
@@ -221,19 +223,19 @@ func (req *rawSendRequest) setAgentID(agentID int) error {
 	return nil
 }
 
-func (req *rawSendRequest) setTargets(targets *TargetSet) error {
+func (req *sendRequest) setTargets(targets TargetSet) error {
 	if err := targets.Validate(); err != nil {
 		return err
 	}
 
-	req.ToUser = targets.Users
-	req.ToParty = targets.Parties
-	req.ToTag = targets.Tags
+	req.ToUser = targets.users
+	req.ToParty = targets.parties
+	req.ToTag = targets.tags
 
 	return nil
 }
 
-func (req *rawSendRequest) setMessage(m Message) error {
+func (req *sendRequest) setMessage(m Message) error {
 	req.MsgType = m.Type()
 
 	switch v := m.(type) {
@@ -271,17 +273,17 @@ func (req *rawSendRequest) setMessage(m Message) error {
 	return nil
 }
 
-type rawSendResponse struct {
-	InvalidUser  UserSet  `json:"invaliduser,omitempty"`
-	InvalidParty PartySet `json:"invalidparty,omitempty"`
-	InvalidTag   TagSet   `json:"invalidtag,omitempty"`
+type sendResponse struct {
+	InvalidUser  internal.StringSet `json:"invaliduser,omitempty"`
+	InvalidParty internal.IntSet    `json:"invalidparty,omitempty"`
+	InvalidTag   internal.IntSet    `json:"invalidtag,omitempty"`
 }
 
-func newSendResult(r *rawSendResponse) *SendResult {
+func newSendResult(r *sendResponse) *SendResult {
 	targets := &TargetSet{
-		Users:   r.InvalidUser,
-		Parties: r.InvalidParty,
-		Tags:    r.InvalidTag,
+		users:   r.InvalidUser,
+		parties: r.InvalidParty,
+		tags:    r.InvalidTag,
 	}
 
 	return &SendResult{

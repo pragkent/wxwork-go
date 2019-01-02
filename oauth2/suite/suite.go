@@ -1,4 +1,4 @@
-package corp
+package suite
 
 import (
 	"context"
@@ -9,25 +9,25 @@ import (
 	"github.com/pragkent/wxwork-go/oauth2/internal"
 )
 
-const defaultTokenURL = "https://qyapi.weixin.qq.com/cgi-bin/gettoken"
+const defaultTokenURL = "https://qyapi.weixin.qq.com/cgi-bin/service/get_corp_token"
 
-// Config describes a 2-legged OAuth2 flow, with both the
-// client application information and the server's endpoint URLs.
+// Config describes a 2-legged OAuth2 flow for suite.
 type Config struct {
-	CorpID string
-
-	CorpSecret string
+	AuthCorpID       string
+	PermanentCode    string
+	SuiteTokenSource oauth2.TokenSource
 
 	// TokenURL is the resource server's token endpoint
 	// URL. This is a constant specific to each server.
 	TokenURL string
 }
 
-func NewConfig(corpID, corpSecret string) *Config {
+func NewConfig(corpID, permCode string, suiteTokenSource oauth2.TokenSource) *Config {
 	return &Config{
-		CorpID:     corpID,
-		CorpSecret: corpSecret,
-		TokenURL:   defaultTokenURL,
+		AuthCorpID:       corpID,
+		PermanentCode:    permCode,
+		SuiteTokenSource: suiteTokenSource,
+		TokenURL:         defaultTokenURL,
 	}
 }
 
@@ -68,13 +68,27 @@ type tokenSource struct {
 	conf *Config
 }
 
+type tokenReq struct {
+	AuthCorpID    string `json:"auth_corpid"`
+	PermanentCode string `json:"permanent_code"`
+}
+
 // Token refreshes the token by using a new client credentials request.
 func (c *tokenSource) Token() (*oauth2.Token, error) {
-	q := url.Values{}
-	q.Set("corpid", c.conf.CorpID)
-	q.Set("corpsecret", c.conf.CorpSecret)
+	stoken, err := c.conf.SuiteTokenSource.Token()
+	if err != nil {
+		return nil, err
+	}
 
-	tk, err := internal.RetrieveToken(c.ctx, c.conf.TokenURL, q, nil)
+	q := url.Values{}
+	q.Set("suite_access_token", stoken.AccessToken)
+
+	treq := tokenReq{
+		AuthCorpID:    c.conf.AuthCorpID,
+		PermanentCode: c.conf.PermanentCode,
+	}
+
+	tk, err := internal.RetrieveToken(c.ctx, c.conf.TokenURL, q, treq)
 	if err != nil {
 		if rErr, ok := err.(*internal.RetrieveError); ok {
 			return nil, (*oauth2.RetrieveError)(rErr)

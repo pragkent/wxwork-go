@@ -8,13 +8,14 @@ import (
 	"strings"
 )
 
-const sep = "|"
+// Separator of target elements.
+const setSep = "|"
 
 // StringSet helps encoding and decoding string slice.
 type StringSet []string
 
 func (s StringSet) MarshalJSON() ([]byte, error) {
-	str := strings.Join(s, sep)
+	str := strings.Join(s, setSep)
 	return json.Marshal(str)
 }
 
@@ -28,7 +29,7 @@ func (s *StringSet) UnmarshalJSON(b []byte) error {
 		return nil
 	}
 
-	*s = StringSet(strings.Split(str, sep))
+	*s = StringSet(strings.Split(str, setSep))
 	return nil
 }
 
@@ -40,7 +41,7 @@ func (s IntSet) MarshalJSON() ([]byte, error) {
 
 	for i, v := range s {
 		if i != 0 {
-			buf.WriteString(sep)
+			buf.WriteString(setSep)
 		}
 
 		buf.WriteString(strconv.Itoa(v))
@@ -61,7 +62,7 @@ func (s *IntSet) UnmarshalJSON(b []byte) error {
 
 	var r []int
 
-	vs := strings.Split(str, sep)
+	vs := strings.Split(str, setSep)
 	for _, v := range vs {
 		iv, err := strconv.Atoi(v)
 		if err != nil {

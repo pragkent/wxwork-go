@@ -100,9 +100,7 @@ func (c *Client) NewRequest(method, urlStr string, body interface{}) (*http.Requ
 // The provided ctx must be non-nil. If it is canceled or times out,
 // ctx.Err() will be returned.
 func (c *Client) Do(ctx context.Context, req *http.Request, v interface{}) (*http.Response, error) {
-	req.WithContext(ctx)
-
-	resp, err := c.client.Do(req)
+	resp, err := c.client.Do(req.WithContext(ctx))
 	if err != nil {
 		// If we got an error, and the context has been canceled,
 		// the context's error is probably more useful.
@@ -124,15 +122,16 @@ func (c *Client) Do(ctx context.Context, req *http.Request, v interface{}) (*htt
 	}
 	defer resp.Body.Close()
 
-	if err = CheckResponse(resp); err != nil {
+	body, err := CheckResponse(resp)
+	if err != nil {
 		return resp, err
 	}
 
 	if v != nil {
 		if w, ok := v.(io.Writer); ok {
-			io.Copy(w, resp.Body)
+			io.Copy(w, body)
 		} else {
-			decErr := json.NewDecoder(resp.Body).Decode(v)
+			decErr := json.NewDecoder(body).Decode(v)
 			if decErr == io.EOF {
 				decErr = nil // ignore EOF errors caused by empty response body
 			}
@@ -200,21 +199,24 @@ func (e *ErrorResponse) Error() string {
 
 // CheckResponse returns an error (of type *Error) if the
 // status code is not 2xx or errcode is not 0.
-func CheckResponse(res *http.Response) error {
-	slurp, err := ioutil.ReadAll(res.Body)
+func CheckResponse(res *http.Response) (io.Reader, error) {
+	var buf bytes.Buffer
+	reader := io.TeeReader(res.Body, &buf)
+
+	slurp, err := ioutil.ReadAll(reader)
 	if err == nil {
 		jerr := new(ErrorResponse)
 		err = json.Unmarshal(slurp, jerr)
 		if err == nil && jerr.Code == 0 {
-			return nil
+			return &buf, nil
 		}
 
 		jerr.HTTPCode = res.StatusCode
 		jerr.Body = string(slurp)
-		return jerr
+		return nil, jerr
 	}
 
-	return &ErrorResponse{
+	return nil, &ErrorResponse{
 		HTTPCode: res.StatusCode,
 		Body:     string(slurp),
 		Header:   res.Header,
